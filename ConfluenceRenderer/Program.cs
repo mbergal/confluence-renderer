@@ -50,7 +50,8 @@ h2 {
 ";
 
 
-        static readonly IMemoryCache cache = new Microsoft.Extensions.Caching.Memory.MemoryCache( new MemoryCacheOptions());
+        static readonly IMemoryCache cache =
+            new Microsoft.Extensions.Caching.Memory.MemoryCache(new MemoryCacheOptions());
 
         static void Main(string[] args)
         {
@@ -91,7 +92,7 @@ h2 {
 
             foreach (var aa in a.Root.Elements())
             {
-                newMethod(outWriter, aa);
+                processMarkup(outWriter, aa);
             }
 
             outWriter.WriteLine("</body>");
@@ -106,7 +107,7 @@ h2 {
             return xReader.ReadOuterXml();
         }
 
-        private static void newMethod(TextWriter outWriter, XElement aa)
+        private static void processMarkup(TextWriter outWriter, XElement aa)
         {
             XNamespace skos = XNamespace.Get("http://ac.com");
 
@@ -181,16 +182,6 @@ h2 {
             }
         }
 
-        public static Stream GenerateStreamFromString(string s)
-        {
-            var stream = new MemoryStream();
-            var writer = new StreamWriter(stream);
-            writer.Write(s);
-            writer.Flush();
-            stream.Position = 0;
-            return stream;
-        }
-
         private static void processElement(TextWriter outWriter, XElement aa)
         {
             outWriter.WriteLine($"<{aa.Name}>");
@@ -198,7 +189,7 @@ h2 {
             outWriter.WriteLine($"</{aa.Name}>");
         }
 
-        private static void processInlines(TextWriter outWriter, XElement aa)
+        private static void processInlines(TextWriter outWriter, XContainer aa)
         {
             foreach (var x in aa.Nodes())
             {
@@ -209,7 +200,7 @@ h2 {
                         break;
                         ;
                     case XmlNodeType.Element:
-                        newMethod(outWriter, (XElement) x);
+                        processMarkup(outWriter, (XElement)x);
                         break;
                     default:
                         throw new Exception();
@@ -217,22 +208,38 @@ h2 {
             }
         }
 
-        static byte[] plantUmlImageFactory(ICacheEntry cacheEntry)
+        private static byte[] plantUmlImageFactory(ICacheEntry cacheEntry)
         {
-            string plantUml = (string)cacheEntry.Key;
+            string plantUml = (string) cacheEntry.Key;
             Console.WriteLine($"Rendering {plantUml}...");
+
+            var ms = runPlantUml(plantUml);
+            var imageBytes = toBytes(ms);
+
+            Console.WriteLine($"...done");
+            return imageBytes;
+        }
+
+        private static byte[] toBytes(MemoryStream ms)
+        {
+            byte[] imageBytes;
+            ms.Seek(0, SeekOrigin.Begin);
+            using (var binaryReader = new BinaryReader(ms))
+            {
+                imageBytes = binaryReader.ReadBytes((int) ms.Length);
+            }
+
+            return imageBytes;
+        }
+
+        private static MemoryStream runPlantUml(string plantUml)
+        {
+            var ms = new MemoryStream();
             var cmd = Command.Run("cmd.exe", "/c plantuml -p");
 
             cmd.StandardInput.PipeFromAsync(new StringReader(plantUml));
-            var ms = new MemoryStream();
             cmd.StandardOutput.PipeToAsync(ms, true, true).Wait();
-            ms.Seek(0, SeekOrigin.Begin);
-            var ss = new BinaryReader(ms);
-            var bbb = ss.ReadBytes((int)ms.Length);
-            Console.WriteLine($"...done");
-            return bbb;
+            return ms;
         }
-
-
     }
 }
