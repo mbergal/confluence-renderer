@@ -8,7 +8,7 @@ using System.Xml.Linq;
 using Medallion.Shell;
 using Microsoft.Extensions.Caching.Memory;
 
-namespace ConsoleApp2
+namespace ConfluenceRenderer
 {
     class Program
     {
@@ -49,34 +49,12 @@ h2 {
 }
 ";
 
-        static byte[] complexObjectFactory(ICacheEntry cacheEntry)
-        {
-            string plantUml = (string) cacheEntry.Key;
-            Console.WriteLine($"Rendering {plantUml}...");
-            var cmd = Command.Run("cmd.exe", "/c plantuml -p");
 
-            cmd.StandardInput.PipeFromAsync(new StringReader(plantUml));
-            var ms = new MemoryStream();
-            cmd.StandardOutput.PipeToAsync(ms, true, true).Wait();
-            ms.Seek(0, SeekOrigin.Begin);
-            var ss = new BinaryReader(ms);
-            var bbb = ss.ReadBytes((int)ms.Length);
-            Console.WriteLine($"...done");
-            return bbb;
-        }
-
-
-        static IMemoryCache cache = new Microsoft.Extensions.Caching.Memory.MemoryCache( new MemoryCacheOptions());
+        static readonly IMemoryCache cache = new Microsoft.Extensions.Caching.Memory.MemoryCache( new MemoryCacheOptions());
 
         static void Main(string[] args)
         {
             var filePath = args[0];
-
-
-            // Declare (but don't execute) a func/delegate whose result we want to cache
-
-            // Get our ComplexObjects from the cache, or build them in the factory func 
-            // and cache the results for next time under the given key
 
             var content = "";
             while (true)
@@ -87,7 +65,7 @@ h2 {
                     Console.WriteLine("Change detected");
                     try
                     {
-                        newMethod1(filePath);
+                        generateHtml(filePath);
                     }
                     catch (Exception ex)
                     {
@@ -101,13 +79,13 @@ h2 {
             }
         }
 
-        private static void newMethod1(string filePath)
+        private static void generateHtml(string filePath)
         {
+            Console.WriteLine($"Generating HTML");
             var xml = File.ReadAllText(filePath);
             var rootedXml = $"<root xmlns:ac=\"http://ac.com\">{xml}</root>";
             var outWriter = new StringWriter();
             var a = XDocument.Parse(rootedXml);
-            var c = a;
             outWriter.WriteLine($"<style>\n{CSS}\n</style>");
             outWriter.WriteLine("<body>");
 
@@ -118,11 +96,12 @@ h2 {
 
             outWriter.WriteLine("</body>");
             File.WriteAllText(filePath + ".html", outWriter.ToString());
+            Console.WriteLine($"...done(generating HTML)");
         }
 
-        public static string OuterXml(XElement thiz)
+        public static string OuterXml(XElement element)
         {
-            var xReader = thiz.CreateReader();
+            var xReader = element.CreateReader();
             xReader.MoveToContent();
             return xReader.ReadOuterXml();
         }
@@ -149,9 +128,10 @@ h2 {
                     break;
                 }
                 case "span":
-
+                {
                     outWriter.WriteLine(OuterXml(aa));
                     break;
+                }
                 case "li":
                 {
                     outWriter.WriteLine($"<{aa.Name.LocalName}>");
@@ -178,7 +158,7 @@ h2 {
                         case "plantuml":
                         {
                             var p = aa.Elements().ToArray()[1].Value;
-                            byte[] cachedResults = cache.GetOrCreate(p, complexObjectFactory);
+                            byte[] cachedResults = cache.GetOrCreate(p, plantUmlImageFactory);
 
                             outWriter.WriteLine("<img src=\"data:image/png;base64," +
                                                 Convert.ToBase64String(cachedResults) + "\" />");
@@ -236,5 +216,23 @@ h2 {
                 }
             }
         }
+
+        static byte[] plantUmlImageFactory(ICacheEntry cacheEntry)
+        {
+            string plantUml = (string)cacheEntry.Key;
+            Console.WriteLine($"Rendering {plantUml}...");
+            var cmd = Command.Run("cmd.exe", "/c plantuml -p");
+
+            cmd.StandardInput.PipeFromAsync(new StringReader(plantUml));
+            var ms = new MemoryStream();
+            cmd.StandardOutput.PipeToAsync(ms, true, true).Wait();
+            ms.Seek(0, SeekOrigin.Begin);
+            var ss = new BinaryReader(ms);
+            var bbb = ss.ReadBytes((int)ms.Length);
+            Console.WriteLine($"...done");
+            return bbb;
+        }
+
+
     }
 }
